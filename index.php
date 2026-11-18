@@ -1,14 +1,14 @@
 <?php
 /**
- * AiFace BS - penerima request sederhana.
+ * AiFace BS - penerima request tanpa API key.
  *
- * Endpoint untuk perangkat:
- * http://192.168.18.17:8000/index.php
- *
- * Semua request disimpan ke SATU file:
+ * Semua request yang masuk akan langsung disimpan ke:
  * logs/aiface.jsonl
  *
- * Jalankan server lokal:
+ * Endpoint perangkat:
+ * http://192.168.18.17:8000/index.php
+ *
+ * Jalankan:
  * php -S 0.0.0.0:8000
  */
 
@@ -19,139 +19,103 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 $logDirectory = __DIR__ . DIRECTORY_SEPARATOR . 'logs';
 $logFile = $logDirectory . DIRECTORY_SEPARATOR . 'aiface.jsonl';
 
-$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN');
 $rawBody = file_get_contents('php://input');
 $rawBody = ($rawBody === false) ? '' : $rawBody;
 
+// Coba baca JSON, tetapi JSON tidak valid pun tetap disimpan.
 $payload = null;
-$jsonError = null;
-
 if ($rawBody !== '') {
-    $payload = json_decode($rawBody, true);
-
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        $jsonError = json_last_error_msg();
+    $decoded = json_decode($rawBody, true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+        $payload = $decoded;
     }
 }
 
-$command = is_array($payload) ? strtolower(trim((string) ($payload['cmd'] ?? ''))) : '';
+$command = is_array($payload) ? (string) ($payload['cmd'] ?? '') : '';
 $serialNumber = is_array($payload) ? (string) ($payload['sn'] ?? '') : '';
 
-/*
- * Simpan semua request (GET maupun POST) ke satu file JSON Lines.
- * Satu request = satu baris JSON.
- */
 $logEntry = [
     'received_at' => date('Y-m-d H:i:s'),
     'method' => $method,
     'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
     'request_uri' => $_SERVER['REQUEST_URI'] ?? '/',
+    'query_string' => $_SERVER['QUERY_STRING'] ?? '',
     'content_type' => $_SERVER['CONTENT_TYPE'] ?? null,
+    'headers' => function_exists('getallheaders') ? getallheaders() : [],
     'cmd' => $command !== '' ? $command : null,
     'sn' => $serialNumber !== '' ? $serialNumber : null,
-    'json_valid' => $rawBody === '' ? null : ($jsonError === null && is_array($payload)),
-    'json_error' => $jsonError,
     'raw' => $rawBody,
-    'payload' => is_array($payload) ? $payload : null,
+    'payload' => $payload,
 ];
 
 if (!is_dir($logDirectory)) {
     @mkdir($logDirectory, 0775, true);
 }
 
-$logSaved = is_dir($logDirectory) && file_put_contents(
-    $logFile,
-    json_encode($logEntry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) . PHP_EOL,
-    FILE_APPEND | LOCK_EX
-) !== false;
+$encodedLog = json_encode(
+    $logEntry,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+);
 
-/*
- * GET hanya untuk mengecek apakah endpoint hidup.
- * Request GET juga ikut tersimpan ke logs/aiface.jsonl.
- */
-if ($method === 'GET') {
-    header('Content-Type: text/plain; charset=utf-8');
-    echo $logSaved
-        ? 'AiFace endpoint is online. Request saved.'
-        : 'AiFace endpoint is online, but failed to save request.';
-    exit;
-}
+$logSaved = $encodedLog !== false
+    && file_put_contents($logFile, $encodedLog . PHP_EOL, FILE_APPEND | LOCK_EX) !== false;
 
 header('Content-Type: application/json; charset=utf-8');
 
-function respond(array $data, int $status = 200): void
+function reply(array $data, int $status = 200): void
 {
     http_response_code($status);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    echo json_encode(
+        $data,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+    );
     exit;
 }
 
-if ($method !== 'POST') {
-    header('Allow: GET, POST');
-    respond([
-        'result' => false,
-        'reason' => 1,
-        'msg' => 'Method not allowed. Use POST.'
-    ], 405);
-}
-
+// Tidak ada API key, token, autentikasi, atau validasi format request.
+// Request apa pun yang masuk dicatat terlebih dahulu ke file log.
 if (!$logSaved) {
-    respond([
-        'ret' => $command !== '' ? $command : 'unknown',
-        'sn' => $serialNumber,
+    reply([
         'result' => false,
-        'reason' => 3,
-        'msg' => 'Request received but could not be saved.'
+        'msg' => 'Request diterima tetapi gagal disimpan ke file log.'
     ], 500);
 }
 
-if ($rawBody === '' || $jsonError !== null || !is_array($payload)) {
-    respond([
-        'ret' => $command !== '' ? $command : 'unknown',
-        'sn' => $serialNumber,
-        'result' => false,
-        'reason' => 4,
-        'msg' => $rawBody === '' ? 'Empty request body' : 'Invalid JSON format'
-    ], 400);
-}
-
-/*
- * Balasan minimum untuk command yang sudah dikenali dari dokumentasi.
- * Data request tetap hanya disimpan ke satu file log.
- */
-switch ($command) {
+// Pertahankan respons dasar protokol untuk command AiFace yang sudah diketahui.
+switch (strtolower(trim($command))) {
     case 'checklive':
-        respond([
+        reply([
             'ret' => 'checklive',
             'cloudtime' => date('Y-m-d H:i:s')
         ]);
 
     case 'reg':
-        respond([
+        reply([
             'ret' => 'reg',
             'sn' => $serialNumber,
             'result' => true
         ]);
 
     case 'sendlog':
-        $records = $payload['record'] ?? [];
-        respond([
+        $records = is_array($payload['record'] ?? null) ? $payload['record'] : [];
+        reply([
             'ret' => 'sendlog',
             'sn' => $serialNumber,
             'result' => true,
-            'count' => is_array($records) ? count($records) : 0,
+            'count' => count($records),
             'logindex' => (int) ($payload['logindex'] ?? 0),
             'mark' => true,
             'access' => 0,
-            'message' => 'Log received. Access is not granted by this receiver.'
+            'message' => 'Log received and saved. Access not granted.'
         ]);
 
     default:
-        respond([
-            'ret' => $command !== '' ? $command : 'unknown',
-            'sn' => $serialNumber,
-            'result' => false,
-            'reason' => 5,
-            'msg' => 'Request saved. This command has not been implemented.'
+        // Command tidak dikenal atau request bukan JSON tetap tersimpan.
+        reply([
+            'ret' => $command !== '' ? $command : 'received',
+            'sn' => $serialNumber !== '' ? $serialNumber : null,
+            'result' => true,
+            'msg' => 'Request received and saved.'
         ]);
 }
