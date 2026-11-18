@@ -3,6 +3,8 @@
 date_default_timezone_set('Asia/Jakarta');
 $endpoint = 'index.php';
 $serial = 'AXUH03009366';
+$serverIp = '192.168.18.17';
+$deviceIp = '192.168.18.227';
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -21,8 +23,8 @@ $serial = 'AXUH03009366';
 <body>
 <div class="wrap">
   <header class="top">
-    <div><div class="eyebrow">Device integration / HTTP JSON</div><h1 class="title">AiFace API Playground</h1><p class="sub">Tes komunikasi perangkat AiFace tanpa perlu menulis kode. Pilih contoh request, tekan tombol kirim, lalu lihat status HTTP dan respons server di sebelah kanan.</p></div>
-    <div class="pill">● Local test console</div>
+    <div><div class="eyebrow">Device integration / HTTP JSON</div><h1 class="title">AiFace API Playground</h1><p class="sub">Playground ini mengirim request uji ke server PHP. Perangkat AiFace yang asli mengirim request ke server yang sama secara mandiri melalui jaringan lokal.</p></div>
+    <div class="pill">● LAN test console</div>
   </header>
 
   <div class="grid">
@@ -31,6 +33,7 @@ $serial = 'AXUH03009366';
       <p class="hint">Pilih tes cepat atau ubah JSON secara manual.</p>
       <div class="field"><label for="endpoint">URL endpoint yang akan dites</label><input class="input" id="endpoint" value="<?= htmlspecialchars($endpoint, ENT_QUOTES, 'UTF-8') ?>"></div>
       <div class="field"><label for="serial">Serial number perangkat</label><input class="input" id="serial" value="<?= htmlspecialchars($serial, ENT_QUOTES, 'UTF-8') ?>"></div>
+      <div class="field"><label>IP perangkat AiFace</label><input class="input" value="<?= htmlspecialchars($deviceIp, ENT_QUOTES, 'UTF-8') ?>" readonly></div>
       <div class="field"><label>Quick requests</label>
         <div class="quick">
           <button class="btn" type="button" data-preset="checklive"><strong>♥ Check live</strong><small>Simulasi heartbeat perangkat</small></button>
@@ -49,7 +52,7 @@ $serial = 'AXUH03009366';
         <button class="btn ghost" id="format" type="button">Format JSON</button>
         <button class="btn ghost" id="reset" type="button">Reset</button>
       </div>
-      <div class="note"><b>Catatan keamanan:</b> tes <code>sendlog</code> memakai data contoh dan receiver saat ini menjawab <code>access: 0</code> (akses ditolak). Playground ini tidak membuka pintu dan tidak mengirim perintah ke perangkat fisik.</div>
+      <div class="note"><b>Penting:</b> tombol Kirim request menguji server PHP, bukan mengirim perintah ke IP AiFace. AiFace adalah klien yang akan menghubungi server. Tes <code>sendlog</code> memakai data contoh dan tidak membuka pintu.</div>
     </section>
 
     <section class="panel">
@@ -63,7 +66,8 @@ $serial = 'AXUH03009366';
 
 Pilih salah satu quick request, lalu tekan "Kirim request".</div>
       <div class="actions"><button class="btn green" id="copy" type="button">Salin response</button><button class="btn ghost" id="clear" type="button">Bersihkan hasil</button></div>
-      <div class="field"><label>Endpoint perangkat (untuk konfigurasi AiFace)</label><div class="url" id="deviceUrl">URL akan mengikuti alamat server yang kamu gunakan.</div></div>
+      <div class="field"><label>Alamat server yang harus diisi di menu AiFace</label><div class="url" id="deviceUrl">http://<?= htmlspecialchars($serverIp, ENT_QUOTES, 'UTF-8') ?>:8000/index.php</div></div>
+      <div class="field"><label>IP AiFace (perangkat pengirim)</label><div class="url"><?= htmlspecialchars($deviceIp, ENT_QUOTES, 'UTF-8') ?></div></div>
     </section>
   </div>
   <div class="footer">AiFace BS · HTTP/HTTPS JSON Playground · <?= date('Y') ?></div>
@@ -72,7 +76,7 @@ Pilih salah satu quick request, lalu tekan "Kirim request".</div>
 const $ = (id) => document.getElementById(id);
 const presets = {
   checklive: () => ({cmd:'checklive',sn:$('serial').value.trim(),time:new Date().toISOString().slice(0,19).replace('T',' ')}),
-  reg: () => ({cmd:'reg',sn:$('serial').value.trim(),devinfo:{modelname:'AiFace',firmware:'playground-test',curip:'192.168.18.227'}}),
+  reg: () => ({cmd:'reg',sn:$('serial').value.trim(),devinfo:{modelname:'AiFace',firmware:'playground-test',curip:'<?= $deviceIp ?>'}}),
   sendlog: () => ({cmd:'sendlog',sn:$('serial').value.trim(),logindex:1,record:[{name:'Contoh Pengguna',userid:'DEMO001',time:new Date().toISOString().slice(0,19).replace('T',' '),mode:1,verify:'success'}]}),
   unknown: () => ({cmd:'verify',sn:$('serial').value.trim(),userid:'DEMO001'})
 };
@@ -103,7 +107,7 @@ $('send').addEventListener('click',async()=>{
     $('response').textContent='Gagal menghubungi endpoint.\n\n'+error.message+'\n\nPeriksa: server PHP sedang berjalan, URL endpoint benar, dan halaman playground dibuka dari server yang sama.';
   }finally{btn.disabled=false;btn.textContent='➤ Kirim request';}
 });
-function updateDeviceUrl(){const url=new URL($('endpoint').value||'index.php',window.location.href);$('deviceUrl').textContent=url.origin+url.pathname;}
+function updateDeviceUrl(){$('deviceUrl').textContent='http://<?= $serverIp ?>:8000/index.php';}
 $('endpoint').addEventListener('input',updateDeviceUrl);updateDeviceUrl();
 </script>
 </body>
