@@ -49,17 +49,22 @@ $logEntry = [
     'payload' => $payload,
 ];
 
-if (!is_dir($logDirectory)) {
-    @mkdir($logDirectory, 0775, true);
+// GET tetap mendapat respons HTTP 200, tetapi TIDAK dimasukkan ke file log.
+$logSaved = true;
+
+if ($method !== 'GET') {
+    if (!is_dir($logDirectory)) {
+        @mkdir($logDirectory, 0775, true);
+    }
+
+    $encodedLog = json_encode(
+        $logEntry,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+    );
+
+    $logSaved = $encodedLog !== false
+        && file_put_contents($logFile, $encodedLog . PHP_EOL, FILE_APPEND | LOCK_EX) !== false;
 }
-
-$encodedLog = json_encode(
-    $logEntry,
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
-);
-
-$logSaved = $encodedLog !== false
-    && file_put_contents($logFile, $encodedLog . PHP_EOL, FILE_APPEND | LOCK_EX) !== false;
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -73,8 +78,8 @@ function reply(array $data, int $status = 200): void
     exit;
 }
 
-// Tidak ada API key, token, autentikasi, atau validasi format request.
-// Request apa pun yang masuk dicatat terlebih dahulu ke file log.
+// Tidak ada API key, token, atau autentikasi.
+// Semua metode selain GET dicatat ke satu file log; GET hanya mendapat respons.
 if (!$logSaved) {
     reply([
         'result' => false,
@@ -111,7 +116,7 @@ switch (strtolower(trim($command))) {
         ]);
 
     default:
-        // Command tidak dikenal atau request bukan JSON tetap tersimpan.
+        // Command tidak dikenal atau request bukan JSON tetap mendapat respons; selain GET sudah tersimpan.
         reply([
             'ret' => $command !== '' ? $command : 'received',
             'sn' => $serialNumber !== '' ? $serialNumber : null,
