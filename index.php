@@ -20,8 +20,30 @@ $logDirectory = __DIR__ . DIRECTORY_SEPARATOR . 'logs';
 $logFile = $logDirectory . DIRECTORY_SEPARATOR . 'aiface.jsonl';
 
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN');
-$rawBody = file_get_contents('php://input');
-$rawBody = ($rawBody === false) ? '' : $rawBody;
+
+// Debug GET /pub/chat langsung ke terminal, tanpa menyimpan GET ke file log.
+if (
+    $method === 'GET'
+    && parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/pub/chat'
+) {
+    error_log("========== GET /pub/chat ==========");
+    error_log("IP: " . ($_SERVER['REMOTE_ADDR'] ?? '-'));
+    error_log("URI: " . ($_SERVER['REQUEST_URI'] ?? '-'));
+    error_log("QUERY: " . ($_SERVER['QUERY_STRING'] ?? '-'));
+    error_log("HEADERS: " . json_encode(
+        function_exists('getallheaders') ? getallheaders() : [],
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+    ));
+    error_log("===================================");
+}
+
+// Body hanya dibaca untuk request selain GET.
+$rawBody = '';
+
+if ($method !== 'GET') {
+    $rawBody = file_get_contents('php://input');
+    $rawBody = ($rawBody === false) ? '' : $rawBody;
+}
 
 // GET hanya digunakan untuk pemeriksaan/koneksi dan tidak diproses sebagai log.
 $payload = null;
