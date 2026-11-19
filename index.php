@@ -23,36 +23,38 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN');
 $rawBody = file_get_contents('php://input');
 $rawBody = ($rawBody === false) ? '' : $rawBody;
 
-// Coba baca JSON, tetapi JSON tidak valid pun tetap disimpan.
+// GET hanya digunakan untuk pemeriksaan/koneksi dan tidak diproses sebagai log.
 $payload = null;
-if ($rawBody !== '') {
-    $decoded = json_decode($rawBody, true);
-    if (json_last_error() === JSON_ERROR_NONE) {
-        $payload = $decoded;
-    }
-}
-
-$command = is_array($payload) ? (string) ($payload['cmd'] ?? '') : '';
-$serialNumber = is_array($payload) ? (string) ($payload['sn'] ?? '') : '';
-
-$logEntry = [
-    'received_at' => date('Y-m-d H:i:s'),
-    'method' => $method,
-    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
-    'request_uri' => $_SERVER['REQUEST_URI'] ?? '/',
-    'query_string' => $_SERVER['QUERY_STRING'] ?? '',
-    'content_type' => $_SERVER['CONTENT_TYPE'] ?? null,
-    'headers' => function_exists('getallheaders') ? getallheaders() : [],
-    'cmd' => $command !== '' ? $command : null,
-    'sn' => $serialNumber !== '' ? $serialNumber : null,
-    'raw' => $rawBody,
-    'payload' => $payload,
-];
-
-// GET tetap mendapat respons HTTP 200, tetapi TIDAK dimasukkan ke file log.
+$command = '';
+$serialNumber = '';
 $logSaved = true;
 
 if ($method !== 'GET') {
+    // Coba baca JSON; JSON tidak valid pun tetap dicatat sebagai raw body.
+    if ($rawBody !== '') {
+        $decoded = json_decode($rawBody, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            $payload = $decoded;
+        }
+    }
+
+    $command = is_array($payload) ? (string) ($payload['cmd'] ?? '') : '';
+    $serialNumber = is_array($payload) ? (string) ($payload['sn'] ?? '') : '';
+
+    $logEntry = [
+        'received_at' => date('Y-m-d H:i:s'),
+        'method' => $method,
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+        'request_uri' => $_SERVER['REQUEST_URI'] ?? '/',
+        'query_string' => $_SERVER['QUERY_STRING'] ?? '',
+        'content_type' => $_SERVER['CONTENT_TYPE'] ?? null,
+        'headers' => function_exists('getallheaders') ? getallheaders() : [],
+        'cmd' => $command !== '' ? $command : null,
+        'sn' => $serialNumber !== '' ? $serialNumber : null,
+        'raw' => $rawBody,
+        'payload' => $payload,
+    ];
+
     if (!is_dir($logDirectory)) {
         @mkdir($logDirectory, 0775, true);
     }
