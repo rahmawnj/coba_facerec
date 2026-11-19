@@ -6,8 +6,25 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 header('Content-Type: application/json; charset=utf-8');
 
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN');
+$requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
-// GET hanya untuk mengecek koneksi, tidak disimpan.
+// Pantau GET /pub/chat di terminal tanpa memasukkannya ke log POST.
+if ($method === 'GET' && $requestPath === '/pub/chat') {
+    $debug = [
+        'time' => date('Y-m-d H:i:s'),
+        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+        'request_uri' => $_SERVER['REQUEST_URI'] ?? '/',
+        'query_string' => $_SERVER['QUERY_STRING'] ?? '',
+        'headers' => function_exists('getallheaders') ? getallheaders() : [],
+    ];
+
+    error_log(
+        '[AiFace PUB CHAT] ' .
+        json_encode($debug, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+    );
+}
+
+// GET tidak disimpan ke aiface.jsonl.
 if ($method === 'GET') {
     echo json_encode([
         'result' => true,
@@ -16,7 +33,7 @@ if ($method === 'GET') {
     exit;
 }
 
-// Hanya request POST yang disimpan.
+// Hanya POST yang disimpan.
 if ($method !== 'POST') {
     http_response_code(405);
     echo json_encode([
@@ -26,7 +43,7 @@ if ($method !== 'POST') {
     exit;
 }
 
-// Ambil seluruh body POST tanpa memfilter atau mengubah isinya.
+// Simpan raw body POST tanpa filter, parsing, atau pemetaan.
 $rawBody = file_get_contents('php://input');
 $rawBody = ($rawBody === false) ? '' : $rawBody;
 
@@ -42,7 +59,7 @@ if (!is_dir($logDirectory) && !mkdir($logDirectory, 0775, true) && !is_dir($logD
     exit;
 }
 
-// Satu request POST = satu baris baru di aiface.jsonl.
+// Satu POST = satu baris JSONL, body tetap utuh sebagai string.
 $logEntry = [
     'received_at' => date('Y-m-d H:i:s'),
     'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
